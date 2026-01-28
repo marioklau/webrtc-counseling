@@ -50,8 +50,7 @@ func WebSocketHandler(c *gin.Context) {
 	}
 
 	clients := manager.rooms[roomID]
-	// Increased limit to 4 to allow ghost connections during quick refreshes
-	if len(clients) >= 4 {
+	if len(clients) >= 2 {
 		manager.mutex.Unlock()
 		conn.WriteJSON(Message{Type: "full"})
 		conn.Close()

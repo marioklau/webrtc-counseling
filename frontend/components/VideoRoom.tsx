@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { useSearchParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
 import { Mic, MicOff, Video, VideoOff, PhoneOff, User, MonitorUp } from "lucide-react";
 import { motion } from "framer-motion";
 import { cn } from "@/lib/utils";
@@ -18,14 +18,17 @@ type SignalMessage =
 const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
-    { urls: "stun:global.stun.twilio.com:3478" } // Backup STUN
+    { urls: "stun:global.stun.twilio.com:3478" }
   ],
 };
 
-export default function VideoRoom() {
+type Props = {
+  roomID: string;
+};
+
+export default function VideoRoom({ roomID }: Props) {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const room = searchParams.get("room");
+  const room = roomID; // Use prop instead of searchParams
 
   const [hasJoined, setHasJoined] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -469,14 +472,29 @@ export default function VideoRoom() {
 
         {/* Remote Video */}
         {remoteStream ? (
-          <video
-            ref={remoteVideoRef}
-            autoPlay
-            playsInline
-            className="w-full h-full object-cover"
-          />
+          <>
+            <video
+              ref={remoteVideoRef}
+              autoPlay
+              playsInline
+              className="w-full h-full object-cover"
+            />
+            {/* Connected badge */}
+            <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-emerald-600 text-white px-4 py-1 rounded-full text-sm font-medium flex items-center gap-2">
+              <span className="w-2 h-2 bg-white rounded-full animate-pulse"></span>
+              Terhubung
+            </div>
+          </>
         ) : (
           <div className="w-full h-full flex flex-col items-center justify-center text-white/50 space-y-4">
+            {/* Status Badge */}
+            <div className={`px-4 py-1 rounded-full text-xs font-medium ${connectionStatus === "waiting" ? "bg-sky-600/20 text-sky-400" :
+              connectionStatus === "connecting" ? "bg-yellow-600/20 text-yellow-400" :
+                "bg-slate-700 text-slate-400"
+              }`}>
+              Status: {connectionStatus}
+            </div>
+
             <div className="relative">
               <div className="absolute inset-0 animate-ping rounded-full bg-sky-500/20"></div>
               <div className="bg-slate-800 p-6 rounded-full">
@@ -486,6 +504,7 @@ export default function VideoRoom() {
             <p className="text-xl font-medium">
               {connectionStatus === "waiting" && "Menunggu partisipan lain..."}
               {connectionStatus === "connecting" && "Menghubungkan..."}
+              {connectionStatus === "connected" && "Menunggu video stream..."}
               {connectionStatus === "disconnected" && "Partisipan keluar"}
             </p>
             {!localStreamRef.current && (
@@ -556,7 +575,17 @@ export default function VideoRoom() {
         <div className="w-px h-8 bg-white/10 mx-2" />
 
         <button
-          onClick={() => router.push("/")}
+          onClick={() => {
+            cleanup();
+            // Redirect to appropriate dashboard
+            // Check client_email first since clients should go to client dashboard
+            const clientEmail = localStorage.getItem("client_email");
+            if (clientEmail) {
+              router.push("/dashboard/client");
+            } else {
+              router.push("/dashboard");
+            }
+          }}
           className="p-4 rounded-full bg-red-600 text-white hover:bg-red-700 transition-all duration-200 shadow-lg shadow-red-600/20"
         >
           <PhoneOff className="w-6 h-6" />

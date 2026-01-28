@@ -1,11 +1,14 @@
 package main
 
 import (
+	"counseling-webrtc/database"
 	"counseling-webrtc/routes"
+
 	"github.com/gin-gonic/gin"
 )
 
 func main() {
+	database.ConnectDB()
 	r := gin.Default()
 
 	// CORS Middleware
