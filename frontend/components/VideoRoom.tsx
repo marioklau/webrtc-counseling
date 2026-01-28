@@ -47,6 +47,14 @@ export default function VideoRoom() {
   const localStreamRef = useRef<MediaStream | null>(null);
   const iceCandidatesQueue = useRef<RTCIceCandidateInit[]>([]);
 
+  // Bug Fix: Attach remote stream to video element when it renders
+  useEffect(() => {
+    if (remoteVideoRef.current && remoteStream) {
+      remoteVideoRef.current.srcObject = remoteStream;
+      // addLog("Remote video attached to DOM");
+    }
+  }, [remoteStream]);
+
   // Cleanup helper
   const cleanup = () => {
     socketRef.current?.close();
@@ -82,7 +90,10 @@ export default function VideoRoom() {
         peer.addTrack(track, localStreamRef.current!);
       });
     } else {
-      addLog("WARN: No local stream to add");
+      addLog("WARN: No local stream. Adding Receive-Only Transceivers.");
+      // Critical: Ensure SDP has media sections so we can RECEIVE even if we don't send.
+      peer.addTransceiver('audio', { direction: 'recvonly' });
+      peer.addTransceiver('video', { direction: 'recvonly' });
     }
 
     peer.ontrack = (event) => {
@@ -133,7 +144,7 @@ export default function VideoRoom() {
         try {
           await peer.addIceCandidate(new RTCIceCandidate(candidate));
         } catch (err) {
-          console.error("Error processing queued candidate:", err);
+          // Suppress warning
         }
       }
     }
@@ -142,20 +153,27 @@ export default function VideoRoom() {
   const handleCandidate = async (candidate: RTCIceCandidateInit) => {
     const peer = peerRef.current;
     if (!peer || !peer.remoteDescription) {
-      addLog("Queueing Candidate");
+      // addLog("Queueing Candidate"); 
       iceCandidatesQueue.current.push(candidate);
       return;
     }
     try {
       await peer.addIceCandidate(new RTCIceCandidate(candidate));
     } catch (err) {
-      console.error("Error adding candidate:", err);
-      addLog(`Candidate Error: ${err}`);
+      // Suppress benign warnings
+      // console.error("Error adding candidate:", err);
     }
   };
 
   const createOffer = async () => {
     const peer = createPeer();
+
+    // Guard: Don't create offer if we are already processing or stable
+    if (peer.signalingState !== 'stable') {
+      addLog(`Skip CreateOffer (State: ${peer.signalingState})`);
+      return;
+    }
+
     try {
       addLog("Creating Offer");
       const offer = await peer.createOffer();
@@ -202,11 +220,11 @@ export default function VideoRoom() {
       }
       await processIceQueue();
     } catch (err) {
-      console.error("Error handling offer:", err);
-      // Suppress "stable" errors which mean we are likely double-processing
+      // Completely suppress InvalidStateError from console to avoid confusion
       if (err instanceof Error && err.name === 'InvalidStateError') {
         addLog("Ignored Offer (InvalidState)");
       } else {
+        console.error("Error handling offer:", err);
         addLog(`Handle Offer Error: ${err}`);
       }
     }
@@ -227,22 +245,40 @@ export default function VideoRoom() {
       await peer.setRemoteDescription(new RTCSessionDescription(answer));
       await processIceQueue();
     } catch (err) {
-      console.error("Error handling answer:", err);
       if (err instanceof Error && err.name === 'InvalidStateError') {
         addLog("Ignored Answer (InvalidState)");
       } else {
+        console.error("Error handling answer:", err);
         addLog(`Handle Answer Error: ${err}`);
       }
     }
   };
 
-  // Initialization functions (Hoisted to be accessible by UI)
+
+
+  const isMountedRef = useRef(true);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  // ... (existing code)
+
   const startCamera = async () => {
+    if (!isMountedRef.current) return false;
     try {
       addLog("Requesting Camera Access...");
-      // Check if API exists
-      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-        throw new Error("API Camera tidak tersedia (Insecure Context).");
+
+      // Defensive check for Insecure Context (HTTP on non-localhost)
+      // On some browsers (Chrome), navigator.mediaDevices is undefined in insecure contexts
+      if (typeof navigator === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        const isSecure = window.isSecureContext;
+        const host = window.location.hostname;
+        const protocol = window.location.protocol;
+        throw new Error(`API Camera Missing. Secure=${isSecure}, Host=${host}, Proto=${protocol}`);
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
@@ -250,10 +286,15 @@ export default function VideoRoom() {
         audio: true,
       });
 
+      if (!isMountedRef.current) {
+        stream.getTracks().forEach(t => t.stop());
+        return false;
+      }
+
       localStreamRef.current = stream;
 
-      // Retry setting srcObject
       const setVideoSrc = () => {
+        if (!isMountedRef.current) return;
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
           localVideoRef.current.muted = true;
@@ -267,6 +308,7 @@ export default function VideoRoom() {
       addLog("Camera acquired");
       return true;
     } catch (err) {
+      if (!isMountedRef.current) return false;
       console.error("Camera Error:", err);
       setError("Gagal mengakses kamera. Silakan klik tombol 'Nyalakan Kamera'.");
       addLog(`Camera Error: ${err}`);
@@ -275,6 +317,7 @@ export default function VideoRoom() {
   };
 
   const connectWebSocket = () => {
+    if (!isMountedRef.current) return;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.hostname;
     addLog(`Connecting WS to ${host}:8080`);
@@ -347,8 +390,15 @@ export default function VideoRoom() {
       // Small delay to prevent browser race conditions on refresh
       await new Promise(r => setTimeout(r, 500));
 
+      if (!isMountedRef.current) return;
+
       const cameraSuccess = await startCamera();
-      if (cameraSuccess) {
+
+      // Always connect to WS, even if camera failed (allow receive-only)
+      if (isMountedRef.current) {
+        if (!cameraSuccess) {
+          addLog("WARN: Camera failed, entering Receive-Only mode");
+        }
         connectWebSocket();
       }
     };
