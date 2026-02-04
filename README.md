@@ -21,9 +21,9 @@ Platform konseling psikologi berbasis web dengan fitur video call (WebRTC), mana
 
 ### 1. Pendaftaran & Login
 - **Client**: Akses halaman login client (`/client-login`) dan masuk menggunakan email terdaftar.
-  - *Akun Demo*: `test@email.com` (Password default di database hash)
+  - *Akun Demo*: `test@email.com`; *Password*: 'dummy123'
 - **Psikolog**: Akses halaman login expert (`/login`) dan masuk menggunakan email profesional.
-  - *Akun Demo*: `budi@example.com` atau `siti@example.com`
+  - *Akun Demo*: `budi@example.com` atau `siti@example.com`; *Password*: 'password123'
 
 ---
 
@@ -90,7 +90,7 @@ Platform konseling psikologi berbasis web dengan fitur video call (WebRTC), mana
    cd backend
    go run .
    ```
-   *Server berjalan di port 8080*
+   *https://(IP Address):3000/*
 
 3. **Frontend (Next.js)**
    ```bash
@@ -103,4 +103,3 @@ Platform konseling psikologi berbasis web dengan fitur video call (WebRTC), mana
 
 ## ⚠️ Catatan Teknis
 - **WebRTC** memerlukan koneksi HTTPS amam atau localhost untuk akses kamera/mic.
-- Gunakan browser modern (Chrome/Edge/Firefox) untuk pengalaman terbaik.
