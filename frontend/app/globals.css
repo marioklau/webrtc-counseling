@@ -28,3 +28,43 @@ body {
 .mirror {
   transform: scaleX(-1);
 }
+
+/* Fix React Calendar Visibility in Dark Mode */
+.react-calendar {
+  background-color: white !important;
+  color: black !important;
+  border-radius: 0.5rem;
+  border: none !important;
+  font-family: inherit !important;
+}
+
+.react-calendar__navigation button {
+  color: black !important;
+  font-weight: bold;
+}
+
+.react-calendar__month-view__days__day {
+  color: black !important;
+}
+
+.react-calendar__month-view__days__day--weekend {
+  color: #ef4444 !important;
+  /* Red for weekends */
+}
+
+.react-calendar__tile:disabled {
+  background-color: #f3f4f6 !important;
+  color: #d1d5db !important;
+}
+
+.react-calendar__tile--now {
+  background: #fbbf24 !important;
+  /* Amber for current day */
+  color: black !important;
+}
+
+.react-calendar__tile--active {
+  background: #0ea5e9 !important;
+  /* Sky blue for selected */
+  color: white !important;
+}

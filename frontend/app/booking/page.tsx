@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { format, addDays } from "date-fns";
 import { id } from "date-fns/locale";
@@ -20,13 +21,23 @@ type Category = {
   description: string;
 };
 
+type Schedule = {
+  id: number;
+  day_of_week: number;
+  start_time: string;
+  end_time: string;
+  is_active: boolean;
+};
+
 type Psychologist = {
   id: number;
   name: string;
   specialties: string;
   categories: Category[];
+  schedules: Schedule[];
   bio: string;
   is_available: boolean;
+  is_booked: boolean;
 };
 
 type BookingState = {
@@ -40,9 +51,9 @@ type BookingState = {
   additionalNotes: string;
 };
 
-const TIME_SLOTS = [
-  "09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "19:00", "20:00"
-];
+const TIME_SLOTS = Array.from({ length: 24 }, (_, i) =>
+  `${i.toString().padStart(2, '0')}:00`
+);
 
 export default function BookingWizard() {
   const router = useRouter();
@@ -100,7 +111,16 @@ export default function BookingWizard() {
     try {
       const protocol = window.location.protocol;
       const host = window.location.hostname;
-      const res = await fetch(`${protocol}//${host}:8080/api/public/psychologists?category_id=${categoryId}`);
+
+      let url = `${protocol}//${host}:8080/api/public/psychologists?category_id=${categoryId}`;
+
+      // Pass date & time if selected to check conflicts
+      if (data.selectedDate && data.selectedTime) {
+        const dateStr = format(data.selectedDate, "yyyy-MM-dd");
+        url += `&date=${dateStr}&time=${data.selectedTime}`;
+      }
+
+      const res = await fetch(url);
       if (res.ok) {
         const list = await res.json();
         setPsychologists(list || []);
@@ -119,7 +139,7 @@ export default function BookingWizard() {
     if (!data.selectedDate || !data.selectedTime || !data.selectedPsychologist || !data.selectedCategory) return;
 
     const dateStr = format(data.selectedDate, "yyyy-MM-dd");
-    const scheduleTime = `${dateStr}T${data.selectedTime}:00Z`;
+    const scheduleTime = `${dateStr}T${data.selectedTime}:00`;
 
     try {
       setLoading(true);
@@ -244,32 +264,89 @@ export default function BookingWizard() {
         </div>
       ) : (
         <div className="grid gap-4">
-          {psychologists.map(psy => (
-            <div
-              key={psy.id}
-              onClick={() => {
-                setData(prev => ({ ...prev, selectedPsychologist: psy }));
-                handleNext();
-              }}
-              className={`p-4 rounded-xl border cursor-pointer transition-all flex items-start gap-4 ${data.selectedPsychologist?.id === psy.id
-                ? "bg-sky-900/40 border-sky-500 ring-1 ring-sky-500"
-                : "bg-slate-800 border-slate-700 hover:border-slate-500"
-                }`}
-            >
-              <div className="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0">
-                <User className="text-slate-300" />
+          {psychologists.map(psy => {
+            const isAvailable = checkAvailability(psy, data.selectedDate, data.selectedTime);
+            return (
+              <div
+                key={psy.id}
+                onClick={() => {
+                  if (isAvailable) {
+                    setData(prev => ({ ...prev, selectedPsychologist: psy }));
+                    handleNext();
+                  }
+                }}
+                className={`p-4 rounded-xl border transition-all flex items-start gap-4 ${data.selectedPsychologist?.id === psy.id
+                  ? "bg-sky-900/40 border-sky-500 ring-1 ring-sky-500"
+                  : isAvailable
+                    ? "bg-slate-800 border-slate-700 hover:border-slate-500 cursor-pointer"
+                    : "bg-slate-800/50 border-slate-800 opacity-60 cursor-not-allowed"
+                  }`}
+              >
+                <div className="w-12 h-12 bg-slate-700 rounded-full flex items-center justify-center flex-shrink-0">
+                  <User className="text-slate-300" />
+                </div>
+                <div className="flex-grow">
+                  <h4 className="font-semibold text-white">{psy.name}</h4>
+                  <p className="text-sky-400 text-sm">{psy.specialties}</p>
+                  <p className="text-slate-400 text-xs mt-1 line-clamp-2">{psy.bio}</p>
+
+                  <div className="mt-3 pt-3 border-t border-slate-700/50">
+                    <p className="text-xs text-slate-500 mb-1 font-bold">Jadwal Praktik:</p>
+                    {psy.schedules && psy.schedules.length > 0 ? (
+                      <div className="flex flex-wrap gap-2">
+                        {psy.schedules.map(sch => (
+                          <span key={sch.id} className="text-xs bg-slate-700 px-2 py-0.5 rounded text-slate-300">
+                            {getDayName(sch.day_of_week)}: {sch.start_time.substring(0, 5)} - {sch.end_time.substring(0, 5)}
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="text-xs text-slate-500 italic">Belum ada jadwal tetap.</p>
+                    )}
+                  </div>
+
+                  {!isAvailable && (
+                    <div className="mt-2 text-red-400 text-xs font-bold border border-red-900/30 bg-red-900/10 p-2 rounded">
+                      ⛔ Sibuk / Di luar jadwal
+                    </div>
+                  )}
+                </div>
               </div>
-              <div>
-                <h4 className="font-semibold text-white">{psy.name}</h4>
-                <p className="text-sky-400 text-sm">{psy.specialties}</p>
-                <p className="text-slate-400 text-xs mt-1 line-clamp-2">{psy.bio}</p>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </div>
   );
+
+  const getDayName = (dayIdx: number) => {
+    const days = ["Minggu", "Senin", "Selasa", "Rabu", "Kamis", "Jumat", "Sabtu"];
+    return days[dayIdx];
+  };
+
+  const checkAvailability = (psy: Psychologist, date: Date | null, timeStr: string | null) => {
+    // 1. Check strict schedule
+    if (psy.schedules && psy.schedules.length > 0 && date && timeStr) {
+      const dayOfWeek = date.getDay(); // 0-6
+
+      // Find schedule for this day
+      const daySchedule = psy.schedules.find(s => s.day_of_week === dayOfWeek && s.is_active);
+      if (!daySchedule) return false; // Not available on this day
+
+      // Check time range
+      // timeStr is "HH:MM", schedule is "HH:MM:SS"
+      const selectedTimeVal = parseInt(timeStr.replace(":", ""));
+      const startTimeVal = parseInt(daySchedule.start_time.replace(":", "").substring(0, 4));
+      const endTimeVal = parseInt(daySchedule.end_time.replace(":", "").substring(0, 4));
+
+      if (selectedTimeVal < startTimeVal || selectedTimeVal >= endTimeVal) return false;
+    }
+
+    // 2. Check conflict (booked)
+    if (psy.is_booked) return false;
+
+    return true;
+  };
 
   const Step4Review = () => (
     <div className="space-y-6">
@@ -298,13 +375,7 @@ export default function BookingWizard() {
 
       {/* Client Data Input */}
       <div className="space-y-4 border-t border-slate-800 pt-4">
-        <div>
-          <label className="text-sm text-slate-300 mb-1 block">Kontak (Email)</label>
-          <div className="bg-slate-900 border border-slate-700 rounded-lg px-4 py-3 text-slate-400 cursor-not-allowed">
-            {data.clientContact}
-          </div>
-          <p className="text-xs text-slate-500 mt-1">*Email diambil dari akun Anda</p>
-        </div>
+
 
         <div>
           <label className="text-sm text-slate-300 mb-1 block">Nama Samaran (Alias untuk sesi ini)</label>
@@ -346,6 +417,14 @@ export default function BookingWizard() {
 
   return (
     <main className="min-h-screen bg-slate-950 flex flex-col items-center py-12 px-4">
+      {/* Back to Dashboard */}
+      <div className="w-full max-w-lg mb-6">
+        <Link href="/dashboard/client" className="text-slate-400 hover:text-white flex items-center gap-2 transition-colors w-fit">
+          <ArrowLeft size={20} />
+          Kembali ke Dashboard
+        </Link>
+      </div>
+
       {/* Progress Bar */}
       <div className="w-full max-w-lg mb-8">
         <div className="flex justify-between mb-2">
@@ -389,10 +468,10 @@ export default function BookingWizard() {
             exit={{ opacity: 0, x: -20 }}
             transition={{ duration: 0.3 }}
           >
-            {data.step === 1 && <Step1Category />}
-            {data.step === 2 && <Step2Schedule />}
-            {data.step === 3 && <Step3Psychologist />}
-            {data.step === 4 && <Step4Review />}
+            {data.step === 1 && Step1Category()}
+            {data.step === 2 && Step2Schedule()}
+            {data.step === 3 && Step3Psychologist()}
+            {data.step === 4 && Step4Review()}
           </motion.div>
         </AnimatePresence>
       </motion.div>

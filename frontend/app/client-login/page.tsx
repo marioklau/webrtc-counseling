@@ -39,7 +39,15 @@ export default function ClientLoginPage() {
 
         } catch (err) {
             console.error(err);
-            alert("Gagal menghubungi server. Pastikan backend backend berjalan.");
+            let msg = "Gagal menghubungi server. Pastikan backend berjalan.";
+
+            // Check if we are potentially blocking due to self-signed cert on backend
+            const isLocal = window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1";
+            if (!isLocal) {
+                msg = `Gagal terhubung ke Backend! Kemungkinan karena Sertifikat HTTPS belum diterima.\n\nSOLUSI: Buka tab baru, kunjungi https://${window.location.hostname}:8080/api/public/categories, lalu pilih "Advanced" -> "Proceed" untuk menerima sertifikat. Setelah itu, kembali ke sini dan coba login lagi.`;
+            }
+
+            alert(msg);
             setLoading(false);
         }
     };

@@ -65,12 +65,7 @@ export default function Home() {
         </Link>
       </div>
 
-      {/* Client Check Status Link */}
-      <div className="relative z-10 mt-12">
-        <Link href="/status" className="text-slate-500 hover:text-white underline text-sm transition-colors">
-          Sudah booking? Cek status di sini
-        </Link>
-      </div>
+
 
       {/* Footer */}
       <footer className="absolute bottom-4 text-slate-700 text-xs text-center">

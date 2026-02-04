@@ -61,6 +61,19 @@ CREATE TABLE IF NOT EXISTS psychologist_categories (
 );
 
 -- =============================================
+-- PSYCHOLOGIST_SCHEDULES
+-- =============================================
+CREATE TABLE IF NOT EXISTS psychologist_schedules (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    psychologist_id INT NOT NULL,
+    day_of_week INT NOT NULL, -- 0=Sunday, 1=Monday, ..., 6=Saturday
+    start_time TIME NOT NULL,
+    end_time TIME NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    FOREIGN KEY (psychologist_id) REFERENCES psychologists(id) ON DELETE CASCADE
+);
+
+-- =============================================
 -- CLIENTS TABLE
 -- =============================================
 CREATE TABLE IF NOT EXISTS clients (
@@ -85,6 +98,7 @@ CREATE TABLE IF NOT EXISTS bookings (
     room_id VARCHAR(100),
     session_notes TEXT,
     chat_history TEXT,
+    session_notes TEXT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (psychologist_id) REFERENCES psychologists(id) ON DELETE CASCADE,
     FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE

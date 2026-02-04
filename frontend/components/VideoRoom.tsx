@@ -24,24 +24,22 @@ const ICE_SERVERS = {
 
 type Props = {
   roomID: string;
+  userRole: "client" | "expert";
 };
 
-export default function VideoRoom({ roomID }: Props) {
+export default function VideoRoom({ roomID, userRole }: Props) {
   const router = useRouter();
-  const room = roomID; // Use prop instead of searchParams
+  const room = roomID;
+  // ... (rest of component)
+
 
   const [hasJoined, setHasJoined] = useState(false);
-  const [isMuted, setIsMuted] = useState(false);
-  const [isCameraOff, setIsCameraOff] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [isCameraOff, setIsCameraOff] = useState(true);
   const [remoteStream, setRemoteStream] = useState<MediaStream | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<"connecting" | "waiting" | "connected" | "disconnected">("connecting");
   const [error, setError] = useState<string | null>(null);
-  const [logs, setLogs] = useState<string[]>([]);
 
-  const addLog = (message: string) => {
-    setLogs(prev => [...prev.slice(-10), `${new Date().toLocaleTimeString()} - ${message}`]);
-    console.log(message);
-  };
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -54,7 +52,7 @@ export default function VideoRoom({ roomID }: Props) {
   useEffect(() => {
     if (remoteVideoRef.current && remoteStream) {
       remoteVideoRef.current.srcObject = remoteStream;
-      // addLog("Remote video attached to DOM");
+      // Log removed
     }
   }, [remoteStream]);
 
@@ -75,32 +73,32 @@ export default function VideoRoom({ roomID }: Props) {
   const createPeer = () => {
     if (peerRef.current) {
       if (peerRef.current.signalingState === 'closed') {
-        addLog("Discarding closed peer");
+
         peerRef.current = null;
       } else {
         return peerRef.current;
       }
     }
 
-    addLog("Creating Peer Connection");
+
 
     const peer = new RTCPeerConnection(ICE_SERVERS);
     peerRef.current = peer;
 
     if (localStreamRef.current) {
       localStreamRef.current.getTracks().forEach((track) => {
-        addLog(`Adding local track: ${track.kind}`);
+
         peer.addTrack(track, localStreamRef.current!);
       });
     } else {
-      addLog("WARN: No local stream. Adding Receive-Only Transceivers.");
+
       // Critical: Ensure SDP has media sections so we can RECEIVE even if we don't send.
       peer.addTransceiver('audio', { direction: 'recvonly' });
       peer.addTransceiver('video', { direction: 'recvonly' });
     }
 
     peer.ontrack = (event) => {
-      addLog(`Remote track received: ${event.streams[0].id}`);
+
       setRemoteStream(event.streams[0]);
       if (remoteVideoRef.current) {
         remoteVideoRef.current.srcObject = event.streams[0];
@@ -110,7 +108,7 @@ export default function VideoRoom({ roomID }: Props) {
 
     peer.onicecandidate = (event) => {
       if (event.candidate && socketRef.current?.readyState === WebSocket.OPEN) {
-        addLog("Sending ICE candidate");
+
         socketRef.current.send(JSON.stringify({
           type: "candidate",
           data: event.candidate,
@@ -120,18 +118,18 @@ export default function VideoRoom({ roomID }: Props) {
 
     peer.onconnectionstatechange = () => {
       const state = peer.connectionState;
-      addLog(`P2P State: ${state}`);
+
       if (state === 'connected') {
         setConnectionStatus("connected");
-        addLog("P2P Connected!");
+
       } else if (state === 'failed' || state === 'disconnected') {
         setConnectionStatus("disconnected");
-        addLog("P2P Failed/Disconnected");
+
       }
     };
 
     peer.oniceconnectionstatechange = () => {
-      addLog(`ICE State: ${peer.iceConnectionState}`);
+
     };
 
     return peer;
@@ -140,7 +138,7 @@ export default function VideoRoom({ roomID }: Props) {
   const processIceQueue = async () => {
     const peer = peerRef.current;
     if (!peer) return;
-    addLog(`Processing ${iceCandidatesQueue.current.length} queued candidates`);
+
     while (iceCandidatesQueue.current.length > 0) {
       const candidate = iceCandidatesQueue.current.shift();
       if (candidate) {
@@ -156,7 +154,7 @@ export default function VideoRoom({ roomID }: Props) {
   const handleCandidate = async (candidate: RTCIceCandidateInit) => {
     const peer = peerRef.current;
     if (!peer || !peer.remoteDescription) {
-      // addLog("Queueing Candidate"); 
+
       iceCandidatesQueue.current.push(candidate);
       return;
     }
@@ -173,12 +171,12 @@ export default function VideoRoom({ roomID }: Props) {
 
     // Guard: Don't create offer if we are already processing or stable
     if (peer.signalingState !== 'stable') {
-      addLog(`Skip CreateOffer (State: ${peer.signalingState})`);
+
       return;
     }
 
     try {
-      addLog("Creating Offer");
+
       const offer = await peer.createOffer();
       await peer.setLocalDescription(offer);
 
@@ -190,7 +188,7 @@ export default function VideoRoom({ roomID }: Props) {
       }
     } catch (err) {
       console.error("Error creating offer:", err);
-      addLog(`Offer Error: ${err}`);
+
     }
   };
 
@@ -207,10 +205,10 @@ export default function VideoRoom({ roomID }: Props) {
         // If we are in 'have-local-offer', we have a collision.
         // For simplicity in this lab, we can ignore if we are the initiator (polite/impolite role not strictly defined yet).
         // But to avoid the crash, let's just log warning.
-        addLog(`WARN: Handling offer in ${peer.signalingState} state`);
+
       }
 
-      addLog("Handling Offer");
+
       await peer.setRemoteDescription(new RTCSessionDescription(offer));
       const answer = await peer.createAnswer();
       await peer.setLocalDescription(answer);
@@ -225,10 +223,10 @@ export default function VideoRoom({ roomID }: Props) {
     } catch (err) {
       // Completely suppress InvalidStateError from console to avoid confusion
       if (err instanceof Error && err.name === 'InvalidStateError') {
-        addLog("Ignored Offer (InvalidState)");
+
       } else {
         console.error("Error handling offer:", err);
-        addLog(`Handle Offer Error: ${err}`);
+
       }
     }
   };
@@ -239,20 +237,20 @@ export default function VideoRoom({ roomID }: Props) {
 
     // Guard: If we are already stable, we don't need to set remote answer (it's done).
     if (peer.signalingState === 'stable') {
-      addLog("Ignored Answer (Already Stable)");
+
       return;
     }
 
     try {
-      addLog("Handling Answer");
+
       await peer.setRemoteDescription(new RTCSessionDescription(answer));
       await processIceQueue();
     } catch (err) {
       if (err instanceof Error && err.name === 'InvalidStateError') {
-        addLog("Ignored Answer (InvalidState)");
+
       } else {
         console.error("Error handling answer:", err);
-        addLog(`Handle Answer Error: ${err}`);
+
       }
     }
   };
@@ -273,21 +271,24 @@ export default function VideoRoom({ roomID }: Props) {
   const startCamera = async () => {
     if (!isMountedRef.current) return false;
     try {
-      addLog("Requesting Camera Access...");
-
       // Defensive check for Insecure Context (HTTP on non-localhost)
       // On some browsers (Chrome), navigator.mediaDevices is undefined in insecure contexts
       if (typeof navigator === "undefined" || !navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
         const isSecure = window.isSecureContext;
-        const host = window.location.hostname;
-        const protocol = window.location.protocol;
-        throw new Error(`API Camera Missing. Secure=${isSecure}, Host=${host}, Proto=${protocol}`);
+        if (!isSecure) {
+          throw new Error("Gagal mengakses kamera: Browser memblokir akses di koneksi tidak aman (HTTP). Harap gunakan localhost atau aktifkan flag browser 'Insecure origins treated as secure'.");
+        }
+        throw new Error(`API Camera Missing. Secure=${isSecure}`);
       }
 
       const stream = await navigator.mediaDevices.getUserMedia({
         video: true,
         audio: true,
       });
+
+      // Apply initial mute/camera off state
+      stream.getAudioTracks().forEach(track => track.enabled = false);
+      stream.getVideoTracks().forEach(track => track.enabled = false);
 
       if (!isMountedRef.current) {
         stream.getTracks().forEach(t => t.stop());
@@ -301,20 +302,25 @@ export default function VideoRoom({ roomID }: Props) {
         if (localVideoRef.current) {
           localVideoRef.current.srcObject = stream;
           localVideoRef.current.muted = true;
-          addLog("Local video attached to DOM");
         } else {
           setTimeout(setVideoSrc, 100);
         }
       };
       setVideoSrc();
 
-      addLog("Camera acquired");
       return true;
     } catch (err) {
       if (!isMountedRef.current) return false;
       console.error("Camera Error:", err);
-      setError("Gagal mengakses kamera. Silakan klik tombol 'Nyalakan Kamera'.");
-      addLog(`Camera Error: ${err}`);
+
+      let msg = "Gagal mengakses kamera. Silakan klik tombol 'Nyalakan Kamera'.";
+      if (err instanceof Error) {
+        // Use the specific error message if it's one we know
+        if (err.message.includes("Gagal mengakses kamera") || err.message.includes("API Camera Missing")) {
+          msg = err.message;
+        }
+      }
+      setError(msg);
       return false;
     }
   };
@@ -323,22 +329,23 @@ export default function VideoRoom({ roomID }: Props) {
     if (!isMountedRef.current) return;
     const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
     const host = window.location.hostname;
-    addLog(`Connecting WS to ${host}:8080`);
+
     const ws = new WebSocket(`${protocol}//${host}:8080/api/ws?room=${room}`);
 
     ws.onopen = () => {
       socketRef.current = ws;
       setConnectionStatus("waiting");
-      addLog("WS Connected");
+
     };
 
     ws.onmessage = async (event) => {
       const msg = JSON.parse(event.data) as SignalMessage;
-      addLog(`Signal: ${msg.type}`);
+
 
       switch (msg.type) {
         case "full":
           setError("Ruangan penuh (Maksimal 2 orang).");
+          setConnectionStatus("disconnected"); // Ensure UI reflects disconnection
           ws.close();
           break;
 
@@ -363,18 +370,18 @@ export default function VideoRoom({ roomID }: Props) {
           setRemoteStream(null);
           setConnectionStatus("disconnected");
           cleanupPeer();
-          addLog("Peer left");
+
           break;
       }
     };
 
     ws.onerror = () => {
       setError("Gagal terhubung ke server (WebSocket Error). Pastikan Backend berjalan.");
-      addLog("WS Error");
+
     };
 
     ws.onclose = () => {
-      addLog("WS Closed");
+
     };
   };
 
@@ -387,7 +394,7 @@ export default function VideoRoom({ roomID }: Props) {
     const autoInit = async () => {
       // Check Secure Context
       if (window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1" && !window.isSecureContext) {
-        addLog("WARN: Insecure Context");
+
       }
 
       // Small delay to prevent browser race conditions on refresh
@@ -400,7 +407,7 @@ export default function VideoRoom({ roomID }: Props) {
       // Always connect to WS, even if camera failed (allow receive-only)
       if (isMountedRef.current) {
         if (!cameraSuccess) {
-          addLog("WARN: Camera failed, entering Receive-Only mode");
+          console.warn("WARN: Camera failed, entering Receive-Only mode");
         }
         connectWebSocket();
       }
@@ -441,31 +448,7 @@ export default function VideoRoom({ roomID }: Props) {
       )}
 
       {/* Debug Overlay */}
-      <div className="absolute top-4 left-4 z-50 pointer-events-auto flex flex-col gap-2">
-        <div className="bg-black/50 text-green-400 p-2 rounded text-xs font-mono w-64 h-48 overflow-y-auto">
-          {logs.map((log, i) => (
-            <div key={i}>{log}</div>
-          ))}
-        </div>
-        <div className="flex gap-2">
-          <button onClick={() => window.location.reload()} className="bg-blue-600 text-white text-xs px-2 py-1 rounded">
-            Force Refresh
-          </button>
-          <button onClick={() => {
-            setError(null);
-            setConnectionStatus("connecting");
-            const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-            const host = window.location.hostname;
-            const ws = new WebSocket(`${protocol}//${host}:8080/api/ws?room=${room}`);
-            socketRef.current = ws;
-            // Hacky re-connect, ideally reuse connectWebSocket but need to reset properly
-            // Ideally we should just rely on full refresh or fix connectWebSocket to be reusable
-            connectWebSocket();
-          }} className="bg-yellow-600 text-white text-xs px-2 py-1 rounded">
-            Re-Connect WS
-          </button>
-        </div>
-      </div>
+
 
       {/* Main Video Area (Remote or Waiting State) */}
       <div className="relative w-full h-full max-w-6xl aspect-video bg-black/50 rounded-2xl overflow-hidden shadow-2xl border border-white/10">
@@ -577,13 +560,11 @@ export default function VideoRoom({ roomID }: Props) {
         <button
           onClick={() => {
             cleanup();
-            // Redirect to appropriate dashboard
-            // Check client_email first since clients should go to client dashboard
-            const clientEmail = localStorage.getItem("client_email");
-            if (clientEmail) {
-              router.push("/dashboard/client");
-            } else {
+            // Redirect to appropriate dashboard based on trusted role
+            if (userRole === "expert") {
               router.push("/dashboard");
+            } else {
+              router.push("/dashboard/client");
             }
           }}
           className="p-4 rounded-full bg-red-600 text-white hover:bg-red-700 transition-all duration-200 shadow-lg shadow-red-600/20"

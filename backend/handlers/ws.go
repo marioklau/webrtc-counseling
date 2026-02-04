@@ -15,7 +15,7 @@ type Message struct {
 	Data json.RawMessage `json:"data"`
 }
 
-// RoomManager handles the state of chat rooms
+// RoomManager handles the state of chat rooms (Signaling)
 type RoomManager struct {
 	rooms map[string]map[*websocket.Conn]bool
 	mutex sync.Mutex
@@ -25,10 +25,99 @@ var manager = RoomManager{
 	rooms: make(map[string]map[*websocket.Conn]bool),
 }
 
+// NotificationManager handles user-specific notifications
+type NotificationManager struct {
+	clients map[string]*websocket.Conn // Map email -> connection
+	mutex   sync.Mutex
+}
+
+var notifManager = NotificationManager{
+	clients: make(map[string]*websocket.Conn),
+}
+
 var upgrader = websocket.Upgrader{
 	CheckOrigin: func(r *http.Request) bool {
 		return true
 	},
+}
+
+// SendNotification sends a message to a specific user by email
+func SendNotification(email string, message interface{}) {
+	notifManager.mutex.Lock()
+	defer notifManager.mutex.Unlock()
+
+	// Debug: List all connected clients
+	log.Printf("[NOTIFY] Looking for client: '%s'. Connected clients: %d", email, len(notifManager.clients))
+	for connectedEmail := range notifManager.clients {
+		log.Printf("[NOTIFY]   - Connected: '%s'", connectedEmail)
+	}
+
+	client, ok := notifManager.clients[email]
+	if !ok {
+		log.Printf("[NOTIFY] Client '%s' NOT FOUND in connected clients!", email)
+		return // User not connected
+	}
+
+	log.Printf("[NOTIFY] Sending message to client: '%s'", email)
+	if err := client.WriteJSON(message); err != nil {
+		log.Printf("[NOTIFY] Failed to send notification to %s: %v", email, err)
+		client.Close()
+		delete(notifManager.clients, email)
+	} else {
+		log.Printf("[NOTIFY] Successfully sent notification to '%s'", email)
+	}
+}
+
+// NotificationHandler manages persistent connections for updates
+func NotificationHandler(c *gin.Context) {
+	email := c.Query("email")
+	if email == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "email is required"})
+		return
+	}
+
+	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+	if err != nil {
+		log.Println("Error upgrading notification connection:", err)
+		return
+	}
+
+	notifManager.mutex.Lock()
+	// Close existing connection if any (one active tab policy or overwrite)
+	if existing, ok := notifManager.clients[email]; ok {
+		existing.Close()
+	}
+	notifManager.clients[email] = conn
+	notifManager.mutex.Unlock()
+
+	// Keep connection alive
+	defer func() {
+		notifManager.mutex.Lock()
+		if notifManager.clients[email] == conn {
+			delete(notifManager.clients, email)
+		}
+		notifManager.mutex.Unlock()
+		conn.Close()
+	}()
+
+	for {
+		// Read messages - handle ping/pong to keep connection alive
+		_, message, err := conn.ReadMessage()
+		if err != nil {
+			break
+		}
+
+		// Parse message to check for ping
+		var msg struct {
+			Type string `json:"type"`
+		}
+		if err := json.Unmarshal(message, &msg); err == nil {
+			if msg.Type == "ping" {
+				// Respond with pong
+				conn.WriteJSON(map[string]string{"type": "pong"})
+			}
+		}
+	}
 }
 
 func WebSocketHandler(c *gin.Context) {
