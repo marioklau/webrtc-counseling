@@ -90,7 +90,6 @@ Platform konseling psikologi berbasis web dengan fitur video call (WebRTC), mana
    cd backend
    go run .
    ```
-   *https://(IP Address):3000/*
 
 3. **Frontend (Next.js)**
    ```bash
@@ -98,8 +97,7 @@ Platform konseling psikologi berbasis web dengan fitur video call (WebRTC), mana
    npm install
    npm run dev
    ```
-   *Akses aplikasi di http://localhost:3000*
-   *Untuk akses https (WebRTC requirement di mobile): npm run dev:https*
+   *Akses aplikasi di https://(IP Address):3000/*
 
 ## ⚠️ Catatan Teknis
 - **WebRTC** memerlukan koneksi HTTPS amam atau localhost untuk akses kamera/mic.
